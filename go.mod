@@ -1,7 +1,5 @@
 module github.com/gpiechnik2/xk6-httpagg
 
-replace github.com/gpiechnik2/xk6-httpagg => github.com/Yoel-MR/xk6-httpagg v0.0.0-20221214084651-1a0850bc2682
-
 go 1.17
 
 require go.k6.io/k6 v0.41.0
