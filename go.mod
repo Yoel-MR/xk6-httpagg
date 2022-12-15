@@ -1,4 +1,4 @@
-module github.com/gpiechnik2/xk6-httpagg
+module github.com/Yoel-MR/xk6-httpagg
 
 go 1.17
 
