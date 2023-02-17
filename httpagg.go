@@ -120,8 +120,9 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 
 <head>
     <meta charset="utf-8" />
-    <title>httpagg html report</title>
+    <title>MR API Performance Report</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/x-icon">
     <link rel="stylesheet" href="/css/demo.css" />
     <link rel="preconnect" href="https://fonts.gstatic.com" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&family=Source+Code+Pro&display=swap" />
@@ -238,6 +239,9 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 
         .white {
             color: white;
+        }
+        .failed {
+            color: #ff6666 !important;
         }
 
         h2 {
@@ -422,10 +426,21 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                     {{range .}}
                         <tr>
                             <td><a>{{.Headers.Date}}</a></td>
-                            <td>{{.Status}}</td>
+
+                            {{ if ge (.Status) 500 }}
+                                <td class="failed">{{.Status}}</td>
+                            {{ else }}
+                                <td>{{.Status}}</td>
+                            {{ end }}
+
                             <td>{{.Request.Method}}</td>
                             <td>{{.Request.URL}}</td>
-                            <td>{{.Timings.Duration}}</td>
+
+                            {{ if gt (.Timings.Duration) 1000.00 }}
+                                <td class="failed">{{.Timings.Duration}}</td>
+                            {{ else }}
+                                <td>{{.Timings.Duration}}</td>
+                            {{ end }}
                         </tr>
                     {{end}}
                 </tbody>

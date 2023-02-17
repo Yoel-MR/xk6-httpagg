@@ -1,6 +1,6 @@
 module github.com/Yoel-MR/xk6-httpagg
 
-replace github.com/gpiechnik2/xk6-httpagg => github.com/Yoel-MR/xk6-httpagg v0.0.0-20221215074219-adf7a33682f0
+replace github.com/gpiechnik2/xk6-httpagg => github.com/Yoel-MR/xk6-httpagg v0.0.2-0.20221215080025-7111d4fef2e6
 
 go 1.17
 
