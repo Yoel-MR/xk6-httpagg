@@ -2,8 +2,9 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>httpagg html report</title>
+    <title>MR API Performance Report</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/x-icon">
     <link rel="stylesheet" href="/css/demo.css" />
     <link rel="preconnect" href="https://fonts.gstatic.com" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&family=Source+Code+Pro&display=swap" />
@@ -21,22 +22,13 @@
 
         .container__left {
             /* Initially, the left takes 3/4 width */
-            width: 65%;
+            width: 100%;
             min-width: 30%;
             max-height: 100%;
             border: 1px solid #ece8f1;
             padding: 2%;
             overflow-y: scroll;
             font-family: Helvetica, sans-serif;
-        }
-
-        .container__right {
-            /* Scroll */
-            max-height: 100%;
-            overflow-y: scroll;
-            border: 1px solid #ece8f1;
-            flex: 1;
-            padding: 2%;
         }
 
         table {
@@ -120,6 +112,13 @@
 
         .white {
             color: white;
+        }
+        .failed {
+            color: #ff6666 !important;
+        }
+
+        .success {
+            color: #089925 !important;
         }
 
         h2 {
@@ -293,148 +292,63 @@
             <table id="example">
                 <thead>
                     <tr>
-                        <th>Response timestamp</th>
-                        <th>Status</th>
-                        <th>Method</th>
-                        <th>URL</th>
-                        <th>Duration (ms)</th>
+                        <th rowspan="2">URL</th>
+                        <th colspan="3"># REQUEST</th>
+                        <th colspan="4">DURATION (ms)</th>
+                    </tr>
+                    <tr>
+                        <th>Total</th>
+                        <th>Failed</th>
+                        <th>HTTP >500</th>
+                        <th>Min</th>
+                        <th>Average</th>
+                        <th>P(99.99)</th>
+                        <th>Max</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {{range .}}
+                    {{ range $key, $value := . }}
                         <tr>
-                            <td><a>{{.Headers.Date}}</a></td>
-                            <td>{{.Status}}</td>
-                            <td>{{.Request.Method}}</td>
-                            <td>{{.Request.URL}}</td>
-                            <td>{{.Timings.Duration}}</td>
-                        </tr>
-                    {{end}}
+                            <td>{{$key}}</td>
+                            <td>{{len $value}}</td>
+                            {{ $var := processHttpDuration $value }}
+                            {{ $resp := $value }}
+                                <td>{{$var.FailedRequest}}</td>
+                                <td>{{$var.ServerError}}</td>
+                                <td>{{$var.MinDuration}}</td>
+                                <td>{{$var.AverageDuration}}</td>
+                                <td>{{$var.P99Duration}}</td>
+                                <td>{{$var.MaxDuration}}</td>
+                            </tr>
+                            <tr class="childTableRow">
+                                <td colspan="3">
+                                    <table class="table">
+                                        <thead>
+                                        <tr>
+                                            <th>Response timestamp</th>
+                                            <th>Status</th>
+                                            <th>Method</th>
+                                            <th>Duration (ms)</th>
+                                        </tr>
+                                        </thead>
+                                        {{ range $resp }}
+                                            <tr>
+                                                <td><a>{{.Headers.Date}}</a></td>
+                                                <td>{{.Status}}</td>
+                                                <td>{{.Request.Method}}</td>
+                                                <td>{{.Timings.Duration}}</td>
+                                            </tr>
+                                        {{ end }}
+                                    </table>
+                                </td>
+                            </tr>
+                        {{ end }}
                 </tbody>
             </table>
-        </div>
-        <div></div>
-        <div class="container__right">
-            {{range .}}
-                <div class="invisible_req">
-                    <h2>Response</h2>
-                    <div class="requestContainer">
-                        <span class="purple"><code>{{.Proto}}</code></span>
-                        <span class="white"><code>{{.Status}}</code></span>
-                        <span class="purple"><code>{{.StatusText}}</code></span></br></br>
-
-                        {{ if eq (len .Headers) 0 }}
-                            <span class="white"><code>
-                                No headers
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Headers }}
-                                    {{ $key }}: {{ index $value }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-                       
-                        {{ if eq (len .Cookies) 0 }}
-                            <span class="white"><code>
-                                No cookies
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Cookies }}
-                                    {{ $key }}: {{ index $value }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-
-                        {{ if .Body }}
-                            <span class="white"><code><textarea readonly>{{.Body}}</textarea></code></span>
-                        {{ else if .Body }}
-                            <span class="white"><code>
-                                No body
-                            </code></span>
-                        {{ end }}
-
-                    </div>
-
-
-                    <h2>Request</h2>
-                    <div class="requestContainer">
-                        <span class="purple"><code>{{.Request.Method}}</code></span>
-                        <span class="white"><code>{{.Request.URL}}</code></span>
-                        <span class="purple"><code>{{.Proto}}</code></span></br></br>
-                        
-                        {{ if eq (len .Request.Headers) 0 }}
-                            <span class="white"><code>
-                                No headers
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Request.Headers }}
-                                    {{ $key }}: {{ index $value 0 }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-                        
-                        {{ if eq (len .Request.Cookies) 0 }}
-                            <span class="white"><code>
-                                No cookies
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Request.Cookies }}
-                                    {{ $key }}: {{ (index $value 0).Value }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-
-                        {{ if eq (len .Request.Body) 0 }}
-                            <span class="white"><code>
-                                No body
-                            </code></span>
-                        {{ else }}
-                            <span class="white"><code><textarea readonly>{{.Request.Body}}</textarea></code></span>
-                        {{ end }}
-                    </div>
-
-                    <h2>Additional data</h2>
-                    <div class="requestContainer">
-                        <span class="white"><code>
-                            <p class="purple">Timings:</p>
-                            Duration: {{.Timings.Duration}} ms</br>
-                            Blocked: {{.Timings.Blocked}} ms</br>
-                            Connecting: {{.Timings.Connecting}} ms</br>
-                            LookingUp: {{.Timings.LookingUp}} ms</br>
-                            Receiving: {{.Timings.Receiving}} ms</br>
-                            Sending: {{.Timings.Sending}} ms</br>
-                            TLSHandshaking: {{.Timings.TLSHandshaking}} ms</br>
-                            Waiting: {{.Timings.Waiting}} ms</br></br>
-                            
-                            <p class="purple">TLS:</p>
-                            tls_version: {{.TLSVersion}}</br>
-                            tls_cipher_suite: {{.TLSCipherSuite}}</br></br>
-                           
-                            <p class="purple">OCSP:</p>
-                            NextUpdate: {{.OCSP.NextUpdate}}</br>
-                            ProducedAt: {{.OCSP.ProducedAt}}</br>
-                            RevocationReason: {{.OCSP.RevocationReason}}</br>
-                            RevokedAt: {{.OCSP.RevokedAt}}</br>
-                            Status: {{.OCSP.Status}}</br>
-                            ThisUpdate: {{.OCSP.ThisUpdate}}</br></br>
-
-                            <p class="purple">ERROR DATA:</p>
-                            Error: {{.Error}}</br>
-                            Error_code: {{.ErrorCode}}
-                        </code></span>
-                   </div>
-                </div>
-            {{end}}
         </div>
     </div>
 
     <script type="module">
-       
-
         $(document).ready(function () {
             $('#example').DataTable({
                 "language": {
