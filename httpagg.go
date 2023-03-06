@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"strings"
 	"text/template"
 	"time"
 
+	"github.com/montanaflynn/stats"
 	"go.k6.io/k6/js/modules"
 	"go.k6.io/k6/js/modules/k6/http"
 )
@@ -26,6 +28,15 @@ type options struct {
 	AggregateLevel string `js:"aggregateLevel"`
 }
 
+type HttpObject struct {
+	FailedRequest   float64
+	ServerError     float64
+	MinDuration     float64
+	AverageDuration float64
+	P99Duration     float64
+	MaxDuration     float64
+}
+
 func AppendJSONToFile(fileName string, jsonData http.Response) {
 	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
 	check(err)
@@ -40,21 +51,20 @@ func AppendJSONToFile(fileName string, jsonData http.Response) {
 	}
 }
 
-func getJSONAggrResults(fileName string) []http.Response {
+func getJSONAggrResults(fileName string) map[string][]http.Response {
 	jsonFile, err := os.Open(fileName)
 	if err != nil {
 		fmt.Println("[httpagg] The result file named " + fileName + " does not exist")
-		var responses []http.Response
-		return responses
+		var responsesMap = make(map[string][]http.Response)
+		return responsesMap
 	}
 
-	var responses []http.Response
+	var responsesMap = make(map[string][]http.Response)
 	byteValue, _ := ioutil.ReadAll(jsonFile)
 	responsesCoded := json.NewDecoder(strings.NewReader(string(byteValue[:])))
 
 	for {
 		var response http.Response
-
 		err := responsesCoded.Decode(&response)
 		if err == io.EOF {
 			// all done
@@ -62,9 +72,10 @@ func getJSONAggrResults(fileName string) []http.Response {
 		}
 
 		check(err)
-		responses = append(responses, response)
+		responsesMap[response.Request.URL] = append(responsesMap[response.Request.URL], response)
+
 	}
-	return responses
+	return responsesMap
 }
 
 func check(e error) {
@@ -140,22 +151,13 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 
         .container__left {
             /* Initially, the left takes 3/4 width */
-            width: 65%;
+            width: 100%;
             min-width: 30%;
             max-height: 100%;
             border: 1px solid #ece8f1;
             padding: 2%;
             overflow-y: scroll;
             font-family: Helvetica, sans-serif;
-        }
-
-        .container__right {
-            /* Scroll */
-            max-height: 100%;
-            overflow-y: scroll;
-            border: 1px solid #ece8f1;
-            flex: 1;
-            padding: 2%;
         }
 
         table {
@@ -213,10 +215,6 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 
         .error {
             color: #fa3287;
-        }
-
-        .success {
-            color: #c3e88d;
         }
 
         .requestContainer {
@@ -415,159 +413,41 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             <table id="example">
                 <thead>
                     <tr>
-                        <th>Response timestamp</th>
-                        <th>Status</th>
-                        <th>Method</th>
-                        <th>URL</th>
-                        <th>Duration (ms)</th>
+                        <th rowspan="2">URL</th>
+                        <th colspan="3"># REQUEST</th>
+                        <th colspan="4">DURATION (ms)</th>
+                    </tr>
+                    <tr>
+                        <th>Total</th>
+                        <th>Failed</th>
+                        <th>HTTP >500</th>
+                        <th>Min</th>
+                        <th>Average</th>
+                        <th>P(99.99)</th>
+                        <th>Max</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {{range .}}
+                    {{ range $key, $value := . }}
                         <tr>
-                            <td><a>{{.Headers.Date}}</a></td>
-
-                            {{ if ge (.Status) 500 }}
-                                <td class="failed">{{.Status}}</td>
-                            {{ else }}
-                                <td>{{.Status}}</td>
-                            {{ end }}
-
-                            <td>{{.Request.Method}}</td>
-                            <td>{{.Request.URL}}</td>
-
-                            {{ if gt (.Timings.Duration) 1000.00 }}
-                                <td class="failed">{{.Timings.Duration}}</td>
-                            {{ else }}
-                                <td>{{.Timings.Duration}}</td>
-                            {{ end }}
-                        </tr>
-                    {{end}}
+                            <td>{{$key}}</td>
+                            <td>{{len $value}}</td>
+                            {{ $var := processHttpDuration $value }}
+                            {{ $resp := $value }}
+                                <td>{{$var.FailedRequest}}</td>
+                                <td>{{$var.ServerError}}</td>
+                                <td>{{$var.MinDuration}}</td>
+                                <td>{{$var.AverageDuration}}</td>
+                                <td>{{$var.P99Duration}}</td>
+                                <td>{{$var.MaxDuration}}</td>
+                            </tr>
+                        {{ end }}
                 </tbody>
             </table>
-        </div>
-        <div></div>
-        <div class="container__right">
-            {{range .}}
-                <div class="invisible_req">
-                    <h2>Response</h2>
-                    <div class="requestContainer">
-                        <span class="purple"><code>{{.Proto}}</code></span>
-                        <span class="white"><code>{{.Status}}</code></span>
-                        <span class="purple"><code>{{.StatusText}}</code></span></br></br>
-
-                        {{ if eq (len .Headers) 0 }}
-                            <span class="white"><code>
-                                No headers
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Headers }}
-                                    {{ $key }}: {{ index $value }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-                       
-                        {{ if eq (len .Cookies) 0 }}
-                            <span class="white"><code>
-                                No cookies
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Cookies }}
-                                    {{ $key }}: {{ index $value }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-
-                        {{ if .Body }}
-                            <span class="white"><code><textarea readonly>{{.Body}}</textarea></code></span>
-                        {{ else if .Body }}
-                            <span class="white"><code>
-                                No body
-                            </code></span>
-                        {{ end }}
-
-                    </div>
-
-
-                    <h2>Request</h2>
-                    <div class="requestContainer">
-                        <span class="purple"><code>{{.Request.Method}}</code></span>
-                        <span class="white"><code>{{.Request.URL}}</code></span>
-                        <span class="purple"><code>{{.Proto}}</code></span></br></br>
-                        
-                        {{ if eq (len .Request.Headers) 0 }}
-                            <span class="white"><code>
-                                No headers
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Request.Headers }}
-                                    {{ $key }}: {{ index $value 0 }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-                        
-                        {{ if eq (len .Request.Cookies) 0 }}
-                            <span class="white"><code>
-                                No cookies
-                            </code></span></br></br>
-                        {{ else }}
-                            <span class="white"><code>
-                                {{ range $key, $value := .Request.Cookies }}
-                                    {{ $key }}: {{ (index $value 0).Value }}</br>
-                                {{ end }}
-                            </code></span></br>
-                        {{ end }}
-
-                        {{ if eq (len .Request.Body) 0 }}
-                            <span class="white"><code>
-                                No body
-                            </code></span>
-                        {{ else }}
-                            <span class="white"><code><textarea readonly>{{.Request.Body}}</textarea></code></span>
-                        {{ end }}
-                    </div>
-
-                    <h2>Additional data</h2>
-                    <div class="requestContainer">
-                        <span class="white"><code>
-                            <p class="purple">Timings:</p>
-                            Duration: {{.Timings.Duration}} ms</br>
-                            Blocked: {{.Timings.Blocked}} ms</br>
-                            Connecting: {{.Timings.Connecting}} ms</br>
-                            LookingUp: {{.Timings.LookingUp}} ms</br>
-                            Receiving: {{.Timings.Receiving}} ms</br>
-                            Sending: {{.Timings.Sending}} ms</br>
-                            TLSHandshaking: {{.Timings.TLSHandshaking}} ms</br>
-                            Waiting: {{.Timings.Waiting}} ms</br></br>
-                            
-                            <p class="purple">TLS:</p>
-                            tls_version: {{.TLSVersion}}</br>
-                            tls_cipher_suite: {{.TLSCipherSuite}}</br></br>
-                           
-                            <p class="purple">OCSP:</p>
-                            NextUpdate: {{.OCSP.NextUpdate}}</br>
-                            ProducedAt: {{.OCSP.ProducedAt}}</br>
-                            RevocationReason: {{.OCSP.RevocationReason}}</br>
-                            RevokedAt: {{.OCSP.RevokedAt}}</br>
-                            Status: {{.OCSP.Status}}</br>
-                            ThisUpdate: {{.OCSP.ThisUpdate}}</br></br>
-
-                            <p class="purple">ERROR DATA:</p>
-                            Error: {{.Error}}</br>
-                            Error_code: {{.ErrorCode}}
-                        </code></span>
-                   </div>
-                </div>
-            {{end}}
         </div>
     </div>
 
     <script type="module">
-       
-
         $(document).ready(function () {
             $('#example').DataTable({
                 "language": {
@@ -616,7 +496,33 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 	`
 
 	// temp := template.Must(template.New("index.txt").Funcs(funcMap).ParseFiles("index.txt"))
-	temp, err := template.New("index.txt").Parse(tpl)
+	var responsesMap = getJSONAggrResults(httpaggResultsFileName)
+	temp, err := template.New("index.txt").Funcs(template.FuncMap{
+		"processHttpDuration": func(arrResponse []http.Response) HttpObject {
+			var err500, fail int
+			var tmp = make([]float64, 0, len(arrResponse))
+			for _, element := range arrResponse {
+				if element.Status >= 500 {
+					err500 += 1
+				} else if (element.Status == 0) || (element.Status >= 400 && element.Status < 500) {
+					fail += 1
+				}
+				tmp = append(tmp, element.Timings.Duration)
+			}
+			min, _ := stats.Min(tmp)
+			avg, _ := stats.Mean(tmp)
+			p99, _ := stats.Percentile(tmp, 99.99)
+			max, _ := stats.Max(tmp)
+			return HttpObject{
+				FailedRequest:   float64(fail),
+				ServerError:     float64(err500),
+				MinDuration:     math.Round(min*100) / 100,
+				AverageDuration: math.Round(avg*100) / 100,
+				P99Duration:     math.Round(p99*100) / 100,
+				MaxDuration:     math.Round(max*100) / 100,
+			}
+		},
+	}).Parse(tpl)
 	check(err)
 
 	if httpaggResultsFileName == "" {
@@ -627,12 +533,11 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 		httpaggReportFileName = "httpaggReport.html"
 	}
 
-	responses := getJSONAggrResults(httpaggResultsFileName)
-	if len(responses) != 0 {
+	if len(responsesMap) != 0 {
 		file, err := os.Create(httpaggReportFileName)
 		check(err)
 
-		err = temp.Execute(file, responses)
+		err = temp.Execute(file, responsesMap)
 		check(err)
 	}
 }
