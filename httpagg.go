@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -28,7 +28,8 @@ type options struct {
 	AggregateLevel string `js:"aggregateLevel"`
 }
 
-type HttpObject struct {
+// metrics data of single object
+type HttpObjectMetrics struct {
 	FailedRequest   float64
 	ServerError     float64
 	MinDuration     float64
@@ -37,7 +38,30 @@ type HttpObject struct {
 	MaxDuration     float64
 }
 
-func AppendJSONToFile(fileName string, jsonData http.Response) {
+// single http object is 1 pattern on 1 method
+type HttpObject struct {
+	UrlPattern string
+	HttpMethod string
+}
+
+// filtering http response data to only essentials
+type HttpResponseFiltered struct {
+	Url     string
+	Status  int
+	Method  string
+	Timings struct {
+		Duration       float64
+		Blocked        float64
+		LookingUp      float64
+		Connecting     float64
+		TLSHandshaking float64
+		Sending        float64
+		Waiting        float64
+		Receiving      float64
+	}
+}
+
+func AppendJSONToFile(fileName string, jsonData HttpResponseFiltered) {
 	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
 	check(err)
 	defer f.Close()
@@ -51,20 +75,72 @@ func AppendJSONToFile(fileName string, jsonData http.Response) {
 	}
 }
 
-func getJSONAggrResults(fileName string) map[string][]http.Response {
+func trimBaseURL(url string) string {
+	// Define a regex pattern to match the word that ends with ".com"
+	baseURLPattern := `([^\s]+\.com)`
+
+	// Find the first match using regex
+	regex := regexp.MustCompile(baseURLPattern)
+	match := regex.FindString(url)
+
+	// Trim the word that ends with ".com" and replace with "{BASE_URL}"
+	trimmedURL := strings.Replace(url, match, "{BASEURL}", 1)
+
+	return trimmedURL
+}
+
+func replaceGUIDs(url string) string {
+	// Replace GUID-like strings with "{GUID}"
+	guidPattern := `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
+	regexGUID := regexp.MustCompile(guidPattern)
+	trimmedURL := regexGUID.ReplaceAllString(url, "{GUID}")
+
+	return trimmedURL
+}
+
+func trimAndReplaceURL(url string) string {
+	// Trim the word that ends with ".com" and replace with "{BASE_URL}"
+	baseURL := trimBaseURL(url)
+	// Replace GUID within URL with "{GUID}" text
+	trimmedURL := replaceGUIDs(baseURL)
+
+	return trimmedURL
+}
+
+func filterHttpResponse(response http.Response) HttpResponseFiltered {
+	return HttpResponseFiltered{
+		Url:    response.Request.URL,
+		Status: response.Status,
+		Method: response.Request.Method,
+		Timings: struct {
+			Duration       float64
+			Blocked        float64
+			LookingUp      float64
+			Connecting     float64
+			TLSHandshaking float64
+			Sending        float64
+			Waiting        float64
+			Receiving      float64
+		}(response.Timings),
+	}
+}
+
+func getJSONAggrResults(fileName string) map[HttpObject][]HttpResponseFiltered {
 	jsonFile, err := os.Open(fileName)
 	if err != nil {
 		fmt.Println("[httpagg] The result file named " + fileName + " does not exist")
-		var responsesMap = make(map[string][]http.Response)
+		var responsesMap = make(map[HttpObject][]HttpResponseFiltered)
 		return responsesMap
 	}
 
-	var responsesMap = make(map[string][]http.Response)
-	byteValue, _ := ioutil.ReadAll(jsonFile)
+	var responsesMap = make(map[HttpObject][]HttpResponseFiltered)
+	byteValue, _ := io.ReadAll(jsonFile)
 	responsesCoded := json.NewDecoder(strings.NewReader(string(byteValue[:])))
 
 	for {
-		var response http.Response
+		var response HttpResponseFiltered
+		var pattern string
+		var currentHttpObject HttpObject
 		err := responsesCoded.Decode(&response)
 		if err == io.EOF {
 			// all done
@@ -72,8 +148,25 @@ func getJSONAggrResults(fileName string) map[string][]http.Response {
 		}
 
 		check(err)
-		responsesMap[response.Request.URL] = append(responsesMap[response.Request.URL], response)
 
+		// get patterns from request URL
+		pattern = trimAndReplaceURL(response.Url)
+		currentHttpObject = HttpObject{
+			UrlPattern: pattern,
+			HttpMethod: response.Method,
+		}
+
+		// Check if the URL pattern + method exists in the map
+		if existingPattern, found := responsesMap[currentHttpObject]; found {
+			// Append the response to the existing data
+			existingPattern = append(existingPattern, response)
+
+			// Update the map with the modified row
+			responsesMap[currentHttpObject] = existingPattern
+		} else {
+			// URL pattern + method combo not found, add it to map with its first response
+			responsesMap[currentHttpObject] = []HttpResponseFiltered{response}
+		}
 	}
 	return responsesMap
 }
@@ -109,18 +202,18 @@ func (*Httpagg) CheckRequest(response http.Response, status bool, options option
 	switch options.AggregateLevel {
 	case "onError":
 		if !status {
-			AppendJSONToFile(options.FileName, response)
+			AppendJSONToFile(options.FileName, filterHttpResponse(response))
 		}
 	case "onSuccess":
 		if status {
-			AppendJSONToFile(options.FileName, response)
+			AppendJSONToFile(options.FileName, filterHttpResponse(response))
 		}
 	case "all":
-		AppendJSONToFile(options.FileName, response)
+		AppendJSONToFile(options.FileName, filterHttpResponse(response))
 	default:
 		// by default, aggregate only invalid http responses
 		if !status {
-			AppendJSONToFile(options.FileName, response)
+			AppendJSONToFile(options.FileName, filterHttpResponse(response))
 		}
 	}
 }
@@ -413,6 +506,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             <table id="example">
                 <thead>
                     <tr>
+                        <th rowspan="2" colspan="1">METHOD</th>
                         <th rowspan="2">URL</th>
                         <th colspan="3"># REQUEST</th>
                         <th colspan="4">DURATION (ms)</th>
@@ -420,7 +514,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                     <tr>
                         <th>Total</th>
                         <th>Failed</th>
-                        <th>HTTP >500</th>
+                        <th>500 Error</th>
                         <th>Min</th>
                         <th>Average</th>
                         <th>P(99.99)</th>
@@ -430,7 +524,8 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                 <tbody>
                     {{ range $key, $value := . }}
                         <tr>
-                            <td>{{$key}}</td>
+                            <td>{{$key.HttpMethod}}</td>
+                            <td>{{$key.UrlPattern}}</td>
                             <td>{{len $value}}</td>
                             {{ $var := processHttpDuration $value }}
                             {{ $resp := $value }}
@@ -498,7 +593,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 	// temp := template.Must(template.New("index.txt").Funcs(funcMap).ParseFiles("index.txt"))
 	var responsesMap = getJSONAggrResults(httpaggResultsFileName)
 	temp, err := template.New("index.txt").Funcs(template.FuncMap{
-		"processHttpDuration": func(arrResponse []http.Response) HttpObject {
+		"processHttpDuration": func(arrResponse []HttpResponseFiltered) HttpObjectMetrics {
 			var err500, fail int
 			var tmp = make([]float64, 0, len(arrResponse))
 			for _, element := range arrResponse {
@@ -513,7 +608,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 			avg, _ := stats.Mean(tmp)
 			p99, _ := stats.Percentile(tmp, 99.99)
 			max, _ := stats.Max(tmp)
-			return HttpObject{
+			return HttpObjectMetrics{
 				FailedRequest:   float64(fail),
 				ServerError:     float64(err500),
 				MinDuration:     math.Round(min*100) / 100,
