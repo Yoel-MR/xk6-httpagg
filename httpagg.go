@@ -46,19 +46,10 @@ type HttpObject struct {
 
 // filtering http response data to only essentials
 type HttpResponseFiltered struct {
-	Url     string
-	Status  int
-	Method  string
-	Timings struct {
-		Duration       float64
-		Blocked        float64
-		LookingUp      float64
-		Connecting     float64
-		TLSHandshaking float64
-		Sending        float64
-		Waiting        float64
-		Receiving      float64
-	}
+	Url      string
+	Status   int
+	Method   string
+	Duration float64
 }
 
 func AppendJSONToFile(fileName string, jsonData HttpResponseFiltered) {
@@ -109,19 +100,10 @@ func trimAndReplaceURL(url string) string {
 
 func filterHttpResponse(response http.Response) HttpResponseFiltered {
 	return HttpResponseFiltered{
-		Url:    response.Request.URL,
-		Status: response.Status,
-		Method: response.Request.Method,
-		Timings: struct {
-			Duration       float64
-			Blocked        float64
-			LookingUp      float64
-			Connecting     float64
-			TLSHandshaking float64
-			Sending        float64
-			Waiting        float64
-			Receiving      float64
-		}(response.Timings),
+		Url:      response.Request.URL,
+		Status:   response.Status,
+		Method:   response.Request.Method,
+		Duration: response.Timings.Duration,
 	}
 }
 
@@ -602,7 +584,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 				} else if (element.Status == 0) || (element.Status >= 400 && element.Status < 500) {
 					fail += 1
 				}
-				tmp = append(tmp, element.Timings.Duration)
+				tmp = append(tmp, element.Duration)
 			}
 			min, _ := stats.Min(tmp)
 			avg, _ := stats.Mean(tmp)
