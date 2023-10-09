@@ -216,29 +216,19 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
     <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
     <style>
         .container {
-            display: flex;
-            /* Misc */
             width: 96%;
-            height: 100%;
-            margin-left: 2%;
-            margin-right: 2%;
-        }
-
-        .container__left {
-            /* Initially, the left takes 3/4 width */
-            width: 100%;
             min-width: 30%;
             max-height: 100%;
             border: 1px solid #ece8f1;
             padding: 2%;
-            overflow-y: scroll;
             font-family: Helvetica, sans-serif;
+            overflow-y: hidden;
         }
 
         table {
             color: #3c3c64;
             font-size: 14px;
-            line-height: 25px;
+            line-height: 16px;
             border-collapse: collapse;
             width: 100%;
             max-height: 50px;
@@ -246,18 +236,17 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
         }
 
         th {
-            background: #f9f8fc;
-            color: #5a5c87;
-            font-size: 10px;
-            letter-spacing: .5px;
-            line-height: 18px;
-            padding: 10px 20px;
+            background: #949494;
+            color: white;
+            font-size: 11px;
+            line-height: 16px;
+            padding: 10px 16px;
             text-align: left;
             text-transform: uppercase;
-            border-bottom: 1px solid #ece8f1;
             box-sizing: border-box;
             border-collapse: collapse;
             cursor: pointer;
+            white-space: nowrap;
         }
 
         td {
@@ -272,8 +261,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
         }
 
         a {
-            border-bottom: 1px solid rgba(125, 100, 255, 0);
-            color: #7d64ff;
+            color: #6cbc28;
             cursor: pointer;
             font-weight: 500;
             padding-bottom: 1px;
@@ -286,35 +274,6 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             font-size: 1em;
             line-height: 25px;
             border-collapse: collapse;
-        }
-
-        .error {
-            color: #fa3287;
-        }
-
-        .requestContainer {
-            background: #3c3c64;
-            margin: 0;
-            padding: 15px;
-            overflow-y: auto;
-            text-align: left;
-            transition: max-height .2s ease-in-out;
-            font-family: monospace, monospace;
-            font-size: 1em;
-            box-sizing: border-box;
-            color: #3c3c64;
-            line-height: 25px;
-        }
-
-        .purple {
-            color: #00cdff;
-        }
-
-        .white {
-            color: white;
-        }
-        .failed {
-            color: #ff6666 !important;
         }
 
         h2 {
@@ -354,6 +313,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             padding-left: 20px;
             margin-bottom: 30px;
             margin-top: 20px;
+            border-radius: 8px;
         }
 
         select {
@@ -395,6 +355,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             line-height: 25px;
             box-sizing: border-box;
             margin-bottom: 20px;
+            
         }
 
         #example_paginate {
@@ -406,7 +367,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             margin-right: auto;
             padding-left: 0px;
             padding-right: 0;
-            color: #7d64ff;
+            color: #6cbc28;
             font-size: 12px;
             font-weight: 700;
             line-height: 18px;
@@ -424,7 +385,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             margin-left: auto;
             padding-left: 0px;
             padding-right: 0px;
-            color: #7d64ff;
+            color: #6cbc28;
             font-size: 12px;
             font-weight: 700;
             line-height: 18px;
@@ -441,7 +402,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             margin-right: 2px;
             padding-left: 0px;
             padding-right: 0px;
-            color: #3c3c64;
+            color: #6cbc28;
             font-size: 13px;
             font-weight: 700;
             line-height: 18px;
@@ -453,10 +414,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
         }
 
         .paginate_button.current {
-            color: #7d64ff;
-        }
-
-        .invisible_req {
+            color: #6cbc28;
         }
 
         textarea {
@@ -466,7 +424,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             width: 100%;
             border: none;
             outline: none;
-          }
+        }
 
         code {
             line-height: 16px;
@@ -479,49 +437,76 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
         #example_wrapper {
             padding-top: 30px;
         }
+
+        .bold-text {
+            font-weight: bold;
+        }
+
+        .green-row {
+            background-color: #efe;
+            color: #080
+        }
+
+        .red-row {
+            background-color: #fee;
+            color: #800
+        }
+
+        .yellow-row {
+            background-color: #ffe;
+            color: #880
+        }
+
+        .blue-row {
+            background-color: #eef;
+            color: #008
+        }
+
+        .purple-row {
+            background-color: #fef;
+            color: #808
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <div class="container__left">
-            <table id="example">
-                <thead>
+        <table id="example">
+            <thead>
+                <tr>
+                    <th rowspan="2" colspan="1">METHOD</th>
+                    <th rowspan="2">URL</th>
+                    <th colspan="3">TOTAL REQUEST</th>
+                    <th colspan="4">DURATION (millisecond)</th>
+                </tr>
+                <tr>
+                    <th>Total</th>
+                    <th>Failed</th>
+                    <th>500 Error</th>
+                    <th>MIN</th>
+                    <th>AVG</th>
+                    <th>MAX</th>
+                    <th>P(99.99)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range $key, $value := . }}
                     <tr>
-                        <th rowspan="2" colspan="1">METHOD</th>
-                        <th rowspan="2">URL</th>
-                        <th colspan="3"># REQUEST</th>
-                        <th colspan="4">DURATION (ms)</th>
-                    </tr>
-                    <tr>
-                        <th>Total</th>
-                        <th>Failed</th>
-                        <th>500 Error</th>
-                        <th>Min</th>
-                        <th>Average</th>
-                        <th>P(99.99)</th>
-                        <th>Max</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{ range $key, $value := . }}
-                        <tr>
-                            <td>{{$key.HttpMethod}}</td>
-                            <td>{{$key.UrlPattern}}</td>
-                            <td>{{len $value}}</td>
-                            {{ $var := processHttpDuration $value }}
-                            {{ $resp := $value }}
-                                <td>{{$var.FailedRequest}}</td>
-                                <td>{{$var.ServerError}}</td>
-                                <td>{{$var.MinDuration}}</td>
-                                <td>{{$var.AverageDuration}}</td>
-                                <td>{{$var.P99Duration}}</td>
-                                <td>{{$var.MaxDuration}}</td>
-                            </tr>
-                        {{ end }}
-                </tbody>
-            </table>
-        </div>
+                        <td class="bold-text">{{$key.HttpMethod}}</td>
+                        <td>{{$key.UrlPattern}}</td>
+                        <td>{{len $value}}</td>
+                        {{ $var := processHttpDuration $value }}
+                        {{ $resp := $value }}
+                            <td>{{$var.FailedRequest}}</td>
+                            <td>{{$var.ServerError}}</td>
+                            <td>{{$var.MinDuration}}</td>
+                            <td>{{$var.AverageDuration}}</td>
+                            <td>{{$var.MaxDuration}}</td>
+                            <td class="bold-text">{{$var.P99Duration}}</td>
+                        </tr>
+                    {{ end }}
+            </tbody>
+        </table>
     </div>
 
     <script type="module">
@@ -530,11 +515,40 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                 "language": {
                     "lengthMenu": '_MENU_',
                     "search": '<i class="search"></i>',
-                    "searchPlaceholder": "Search",
-
+                    "searchPlaceholder": "Search Every Text...",
                 },
                 order: []
             });
+
+            // Function to determine row color based on data
+            function determineRowColor(rowData) {
+                // Change row color based on the method value
+                if (rowData[0] === 'GET') {
+                    return 'green-row';
+                } else if (rowData[0] === 'POST') {
+                    return 'yellow-row';
+                } else if (rowData[0] === 'PUT') {
+                    return 'blue-row';
+                } else if (rowData[0] === 'DELETE') {
+                    return 'red-row';
+                } else if (rowData[0] === 'PATCH'){
+                    return 'purple-row';
+                } else {
+                    return ''
+                }
+            }
+
+            // Apply row colors
+            $('#example tbody').on('draw', function () {
+                $('#example tbody tr').each(function () {
+                    const rowData = $('#example').DataTable().row(this).data();
+                    const rowColorClass = determineRowColor(rowData);
+                    $(this).addClass(rowColorClass);
+                });
+            });
+
+            // Trigger row color assignment on initial load
+            $('#example tbody').trigger('draw');
 
             // change testform
             document.querySelectorAll("textarea").forEach(element => {
@@ -545,17 +559,6 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                 element.addEventListener('input', () => autoResize(element));    
             });
 
-            $(document).on("click", 'table tr', function() {
-                $('table tr').css('background','#ffffff');
-                $(this).css('background','#f9f8fc');
-
-                var data = $('table').DataTable().cells( selectedRow, '' ).render( 'display' );
-                var selectedRow = data.row(this).index();
-
-                $('.invisible_req').css('display','none');
-                $('.invisible_req').eq(selectedRow).css('display','block');
-            });
-
             $(document).on("click", 'thead tr', function() {
                 $('table tr').eq(1).trigger('click');
             });
@@ -563,8 +566,6 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             $(document).on("click", '.paginate_button', function() {
                 $('table tr').eq(1).trigger('click');
             });
-
-            $('table tr').eq(1).trigger('click');
         });
     </script>
 </body>
