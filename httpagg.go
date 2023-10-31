@@ -222,7 +222,6 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             border: 1px solid #ece8f1;
             padding: 2%;
             font-family: Helvetica, sans-serif;
-            overflow-y: hidden;
         }
 
         table {
@@ -539,12 +538,20 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             }
 
             // Apply row colors
-            $('#example tbody').on('draw', function () {
+            function applyRowColors() {
                 $('#example tbody tr').each(function () {
                     const rowData = $('#example').DataTable().row(this).data();
                     const rowColorClass = determineRowColor(rowData);
                     $(this).addClass(rowColorClass);
                 });
+            }
+            
+            // Apply row colors when table is initially loaded
+            applyRowColors();
+            
+            // Reapply row colors on each draw event (including pagination)
+            $('#example').on('draw.dt', function () {
+                applyRowColors();
             });
 
             // Trigger row color assignment on initial load
