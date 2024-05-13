@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/montanaflynn/stats"
 	"go.k6.io/k6/js/modules"
@@ -30,12 +29,14 @@ type options struct {
 
 // metrics data of single object
 type HttpObjectMetrics struct {
-	FailedRequest   float64
-	ServerError     float64
-	MinDuration     float64
+	PassedRequest   int
+	ServerTimeout   int
+	RequestError    int
+	ServerError     int
 	AverageDuration float64
-	P99Duration     float64
 	MaxDuration     float64
+	P95Duration     float64
+	P9999Duration   float64
 }
 
 // single http object is 1 pattern on 1 method
@@ -75,7 +76,17 @@ func trimBaseURL(url string) string {
 	match := regex.FindString(url)
 
 	// Trim the word that ends with ".com" and replace with "{BASE_URL}"
-	trimmedURL := strings.Replace(url, match, "{BASEURL}", 1)
+	var trimmedURL string
+	switch {
+	case strings.Contains(url, "mrapp"), true:
+		trimmedURL = strings.Replace(url, match, "{MRAPP}", 1)
+	case strings.Contains(url, "engage"):
+		trimmedURL = strings.Replace(url, match, "{ENGAGE}", 1)
+	case strings.Contains(url, "online-appointment"):
+		trimmedURL = strings.Replace(url, match, "{WIDGET}", 1)
+	case strings.Contains(url, "v1"):
+		trimmedURL = strings.Replace(url, match, "{EXTERNAL}", 1)
+	}
 
 	return trimmedURL
 }
@@ -159,19 +170,6 @@ func check(e error) {
 	}
 }
 
-// Custom function must have only 1 return value, or 1 return value and an error
-func formatDate(timeStamp time.Time) string {
-	// Define layout for formatting timestamp to string
-	// return timeStamp.Format("01-02-2006")
-	return timeStamp.Format("Mon, 02 Jan 2006")
-
-}
-
-// Map name formatDate to formatDate function above
-var funcMap = template.FuncMap{
-	"formatDate": formatDate,
-}
-
 func (*Httpagg) CheckRequest(response http.Response, status bool, options options) {
 	if options.FileName == "" {
 		options.FileName = "httpagg.json"
@@ -209,236 +207,139 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
     <title>MR API Performance Report</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/x-icon">
-    <link rel="stylesheet" href="/css/demo.css" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&family=Source+Code+Pro&display=swap" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" crossorigin="anonymous">
+
+    <link rel="shortcut icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/png">
     <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
-    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/2.0.7/css/dataTables.dataTables.min.css"></script>
+    <script src="https://cdn.datatables.net/2.0.7/js/dataTables.min.js"></script>
     <style>
-        .container {
-            width: 96%;
-            min-width: 30%;
-            max-height: 100%;
-            border: 1px solid #ece8f1;
-            padding: 2%;
-            font-family: Helvetica, sans-serif;
+        body {
+            margin: 2rem;
+            font-family: "Schibsted Grotesk", sans-serif;
+        }
+
+        .maintitle {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 40px;
         }
 
         table {
-            color: #3c3c64;
-            font-size: 14px;
-            line-height: 16px;
             border-collapse: collapse;
-            width: 100%;
-            max-height: 50px;
-            border: 1px solid #ece8f1;
+            max-width: 100%;
+            margin-bottom: 1.2rem;
+            margin-right: 1.2rem;
+            box-sizing: border-box;
+            font-size: 1.1rem;
+            table-layout: fixed; 
+            word-wrap:break-word; 
+        }
+
+        @media screen {
+            table {
+                width: 100%;
+            }
         }
 
         th {
-            background: #949494;
-            color: white;
-            font-size: 11px;
-            line-height: 16px;
-            padding: 10px 16px;
-            text-align: left;
+            background-color: #0f72ab;
+            color: rgb(255, 255, 255);
+            line-height: 24px;
+            padding: 0.5rem;
             text-transform: uppercase;
-            box-sizing: border-box;
-            border-collapse: collapse;
             cursor: pointer;
-            white-space: nowrap;
+            border: 1px solid #4999c7;
+        }
+
+        th:hover {
+            background-color: #01588a;
         }
 
         td {
-            padding: 20px;
-            vertical-align: baseline;
-            border-bottom: 1px solid #ece8f1;
-            box-sizing: border-box;
+            padding: 1.5rem;
+            border-left: 1px solid #e2e2e283;
+            border-right: 1px solid #e2e2e283;
+            border-bottom: 1px solid #e2e2e2;
         }
 
-        tr {
-            cursor: pointer;
-        }
-
-        a {
-            color: #6cbc28;
-            cursor: pointer;
-            font-weight: 500;
-            padding-bottom: 1px;
-            position: relative;
-            text-decoration: none;
-            transition: all .3s;
-            outline-color: #00cdff;
-            background-color: transparent;
-            box-sizing: border-box;
-            font-size: 1em;
-            line-height: 25px;
-            border-collapse: collapse;
-        }
-
-        h2 {
-            font-size: 25px;
-            font-weight: 400;
-            line-height: 35px;
-            margin-top: 50px;
-            margin-bottom: 15px;
-            position: relative;
-            box-sizing: border-box;
-            color: #3c3c64;
-            font-family: Helvetica, sans-serif;
-        }
-
-        input {
-            color: #5a5c87;
-            font-weight: 400;
-            appearance: none;
-            border: 1px solid #5a5c87;
-            border-radius: 0;
-            box-shadow: 0 1px 5px rgba(60, 60, 100, .05);
-            color: #3c3c64;
-            flex: 1 1;
-            font-size: 15px;
-            font-weight: 500;
-            line-height: 20px;
-            outline: none;
-            overflow-x: auto;
-            padding: 0 40px 0 15px;
-            text-align: left;
-            overflow: visible;
-            font-family: inherit;
-            margin: 0;
-            box-sizing: border-box;
-            width: 100%;
-            padding: 12px;
-            padding-left: 20px;
-            margin-bottom: 30px;
-            margin-top: 20px;
-            border-radius: 8px;
-        }
-
-        select {
-            float: right;
-            border-style: none;
-            background-color: transparent;
-            border: none;
-            color: black;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 700;
-            position: relative;
-            transition: color .3s ease;
-            text-transform: none;
-            overflow: visible;
-            line-height: 1.15;
-            margin-right: fill;
-            align-items: center;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            padding-right: 5px;
-            font-size: 14px;
-            border-color: blue;
-            position: relative;
-            -moz-appearance: none;
-            -webkit-appearance: none;
-            appearance: none;
-            border: none;
-            background: white url("data:image/svg+xml;utf8,<svg width='10' height='10' viewBox='0 0 10 10' fill='none' xmlns='http://www.w3.org/2000/svg' ><path d='M9 3 5 7 1 3' stroke='black' stroke-width='1.6'></path></svg>") no-repeat;
-            background-position: right 0px top 50%;
-            font-family: Helvetica, sans-serif;
-        }
-
-        .dataTables_info {
-            margin-top: 30px;
-            color: #3c3c64;
-            font-size: 14px;
-            line-height: 25px;
-            box-sizing: border-box;
-            margin-bottom: 20px;
-            
-        }
-
-        #example_paginate {
-            display: flex;
-        }
-
-        #example_previous {
-            align-items: flex-start;
-            margin-right: auto;
-            padding-left: 0px;
-            padding-right: 0;
-            color: #6cbc28;
-            font-size: 12px;
-            font-weight: 700;
-            line-height: 18px;
-            text-transform: uppercase;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            text-decoration: none;
-            
-        }
-
-        #example_next {
-            align-items: flex-start;
-            margin-left: auto;
-            padding-left: 0px;
-            padding-right: 0px;
-            color: #6cbc28;
-            font-size: 12px;
-            font-weight: 700;
-            line-height: 18px;
-            text-transform: uppercase;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            text-decoration: none;
-        }
-
-        .paginate_button {
-            margin-left: 2px;
-            margin-right: 2px;
-            padding-left: 0px;
-            padding-right: 0px;
-            color: #6cbc28;
-            font-size: 13px;
-            font-weight: 700;
-            line-height: 18px;
-            text-transform: uppercase;
-            cursor: pointer;
-            flex-direction: column;
-            position: relative;
-            text-decoration: none;
-        }
-
-        .paginate_button.current {
-            color: #6cbc28;
-        }
-
-        textarea {
-            color: white;
-            background-color: #3c3c64;
-            resize: none;
-            width: 100%;
-            border: none;
-            outline: none;
-        }
-
-        code {
-            line-height: 16px;
-        }
-
-        #example_filter {
-            padding-top: 40px;
-        }
-        
-        #example_wrapper {
-            padding-top: 30px;
+        tr:hover {
+            background-color: #e9e9e9;
         }
 
         .bold-text {
             font-weight: bold;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        div.dt-info {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-align: right;
+            color: #696969;
+        }
+
+        .dt-paging-button {
+            color: #7e7e7e;
+            background-color: transparent;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            padding: 6px 10px;
+            margin: 0 2px;
+        }
+
+        .dt-paging-button:hover:not(.disabled) {
+            background-color: #e2e2e2;
+            color: #0b84ca;
+        }
+
+        .dt-paging-button.current {
+            background-color: #e2e2e2;
+            color: #0b84ca;
+        }
+
+        .dt-paging-button.disabled {
+            color: #cbcbcb;
+        }
+
+        .dt-length {
+            float: right;
+        }
+
+        .dt-info {
+            display: none;
+        }
+
+        input {
+            border: 1px solid black;
+            overflow-x: auto;
+            text-align: left;
+            overflow: visible;
+            box-sizing: border-box;
+            width: 100%;
+            padding: 12px;
+            padding-left: 20px;
+            margin-bottom: 20px;
+            margin-top: 20px;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        select {
+            margin: 0px 4px;
+            font-size: 16px;
+            padding: 4px;
+            border: none;
+            border-radius: 4px;
+            background-color: #e5e5e5;
         }
 
         .green-row {
@@ -457,7 +358,7 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
         }
 
         .blue-row {
-            background-color: #eef;
+            background-color: #eff;
             color: #008
         }
 
@@ -469,54 +370,77 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 </head>
 
 <body>
-    <div class="container">
-        <table id="example">
-            <thead>
+    <table id="example">
+        <thead>
+            <tr>
+                <th rowspan="2" colspan="1">METHOD</th>
+                <th rowspan="2">URL</th>
+                <th rowspan="2">PASS</th>
+                <th colspan="3">FAILED</th>
+                <th colspan="4">REQUEST DURATION</th>
+            </tr>
+            <tr>
+                <th>NULL</th>
+                <th>4XX</th>
+                <th>5XX</th>
+                <th>AVG</th>
+                <th>MAX</th>
+                <th>P(95)</th>
+                <th>P(99.99)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range $key, $value := . }}
                 <tr>
-                    <th rowspan="2" colspan="1">METHOD</th>
-                    <th rowspan="2">URL</th>
-                    <th colspan="3">TOTAL REQUEST</th>
-                    <th colspan="4">DURATION (millisecond)</th>
-                </tr>
-                <tr>
-                    <th>Total</th>
-                    <th>Failed</th>
-                    <th>500 Error</th>
-                    <th>MIN</th>
-                    <th>AVG</th>
-                    <th>MAX</th>
-                    <th>P(99.99)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{ range $key, $value := . }}
-                    <tr>
-                        <td class="bold-text">{{$key.HttpMethod}}</td>
-                        <td>{{$key.UrlPattern}}</td>
-                        <td>{{len $value}}</td>
-                        {{ $var := processHttpDuration $value }}
-                        {{ $resp := $value }}
-                            <td>{{$var.FailedRequest}}</td>
-                            <td>{{$var.ServerError}}</td>
-                            <td>{{$var.MinDuration}}</td>
-                            <td>{{$var.AverageDuration}}</td>
-                            <td>{{$var.MaxDuration}}</td>
-                            <td class="bold-text">{{$var.P99Duration}}</td>
-                        </tr>
-                    {{ end }}
-            </tbody>
-        </table>
-    </div>
+                    <td class="center bold-text">{{$key.HttpMethod}}</td>
+                    <td>{{$key.UrlPattern}}</td>
+                    {{ $var := processHttpDuration $value }}
+                    {{ $resp := $value }}
+                        <td class="center">{{if eq $var.PassedRequest 0}}-{{else}}{{$var.PassedRequest}}{{end}}</td>
+                        <td class="center">{{if eq $var.ServerTimeout 0}}-{{else}}{{$var.ServerTimeout}}{{end}}</td>
+                        <td class="center">{{if eq $var.RequestError 0}}-{{else}}{{$var.RequestError}}{{end}}</td>
+                        <td class="center">{{if eq $var.ServerError 0}}-{{else}}{{$var.ServerError}}{{end}}</td>
+                        <td class="center">{{printf "%.2f" $var.AverageDuration}}s</td>
+                        <td class="center">{{printf "%.2f" $var.MaxDuration}}s</td>
+                        <td class="center">{{printf "%.2f" $var.P95Duration}}s</td>
+                        <td class="center">{{printf "%.2f" $var.P9999Duration}}s</td>
+                    </tr>
+                {{ end }}
+        </tbody>
+    </table>
 
     <script type="module">
         $(document).ready(function () {
             $('#example').DataTable({
                 "language": {
-                    "lengthMenu": '_MENU_',
-                    "search": '<i class="search"></i>',
-                    "searchPlaceholder": "Search Every Text...",
+                    "lengthMenu": 'Show _MENU_ of _TOTAL_ Total Request',
+                    "search": '',
+                    "searchPlaceholder": "Search...",
+                    "emptyTable": "No data",
+                    "zeroRecords": 'No records found'
                 },
-                order: []
+                autoWidth: false,
+                columnDefs: [
+                {
+                    
+                    targets: 0,
+                    width: '7%',
+                },
+                { 
+                    targets: 1,
+                    width: '53%',
+                },
+                {
+                    searchable: false,
+                    targets: [2,3,4,5],
+                    width: '4%'
+                },
+                {
+                    searchable: false,
+                    targets: [6,7,8,9],
+                    width: '6%'
+                }
+                ]
             });
 
             // Function to determine row color based on data
@@ -580,31 +504,37 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 </html>
 	`
 
-	// temp := template.Must(template.New("index.txt").Funcs(funcMap).ParseFiles("index.txt"))
 	var responsesMap = getJSONAggrResults(httpaggResultsFileName)
 	temp, err := template.New("index.txt").Funcs(template.FuncMap{
 		"processHttpDuration": func(arrResponse []HttpResponseFiltered) HttpObjectMetrics {
-			var err500, fail int
+			var err500, err400, errNull, pass int
 			var tmp = make([]float64, 0, len(arrResponse))
 			for _, element := range arrResponse {
-				if element.Status >= 500 {
+				if element.Status == 500 {
 					err500 += 1
-				} else if (element.Status == 0) || (element.Status >= 400 && element.Status < 500) {
-					fail += 1
+					tmp = append(tmp, element.Duration)
+				} else if element.Status >= 400 && element.Status < 500 {
+					err400 += 1
+				} else if element.Status == 0 {
+					errNull += 1
+				} else {
+					pass++
+					tmp = append(tmp, element.Duration)
 				}
-				tmp = append(tmp, element.Duration)
 			}
-			min, _ := stats.Min(tmp)
 			avg, _ := stats.Mean(tmp)
-			p99, _ := stats.Percentile(tmp, 99.99)
 			max, _ := stats.Max(tmp)
+			p95, _ := stats.Percentile(tmp, 95)
+			p9999, _ := stats.Percentile(tmp, 99.99)
 			return HttpObjectMetrics{
-				FailedRequest:   float64(fail),
-				ServerError:     float64(err500),
-				MinDuration:     math.Round(min*100) / 100,
-				AverageDuration: math.Round(avg*100) / 100,
-				P99Duration:     math.Round(p99*100) / 100,
-				MaxDuration:     math.Round(max*100) / 100,
+				PassedRequest:   pass,
+				ServerTimeout:   errNull,
+				RequestError:    err400,
+				ServerError:     err500,
+				AverageDuration: float64(math.Round(avg*100) / 100000),
+				MaxDuration:     float64(math.Round(max*100) / 100000),
+				P95Duration:     float64(math.Round(p95*100) / 100000),
+				P9999Duration:   float64(math.Round(p9999*100) / 100000),
 			}
 		},
 	}).Parse(tpl)
@@ -626,5 +556,3 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 		check(err)
 	}
 }
-
-var index string
