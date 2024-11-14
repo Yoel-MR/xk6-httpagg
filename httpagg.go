@@ -33,6 +33,8 @@ type HttpObjectMetrics struct {
 	ServerTimeout   int
 	RequestError    int
 	ServerError     int
+	TotalRequest    int
+	TotalFailed     int
 	AverageDuration float64
 	MaxDuration     float64
 	P95Duration     float64
@@ -198,6 +200,10 @@ func (*Httpagg) CheckRequest(response http.Response, status bool, options option
 	}
 }
 
+func formatTooltip(serverTimeout, requestError, serverError int) string {
+	return fmt.Sprintf("Timeout Error: %d\n4xx Error: %d\nServer Error: %d", serverTimeout, requestError, serverError)
+}
+
 func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileName string) {
 	const tpl = `
 	<html lang="en">
@@ -253,6 +259,14 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             text-transform: uppercase;
             cursor: pointer;
             border: 1px solid #4999c7;
+        }
+
+        th.pass {
+            background-color: #0aff99;
+        }
+
+        th.fail {
+            background-color: #fa4300;
         }
 
         th:hover {
@@ -366,23 +380,51 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
             background-color: #fef;
             color: #808
         }
+        
+        [data-tooltip]::before {
+            /* needed - do not touch */
+            content: attr(data-tooltip);
+            position: absolute;
+            text-align: left;
+            opacity: 0;
+            white-space: pre; /* Preserve whitespace and newlines */
+            color: #000;
+
+            /* customizable */
+            transition: all 0.15s ease;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 1px rgb(219, 219, 219);
+        }
+
+        [data-tooltip]:hover::before {
+            /* needed - do not touch */
+            opacity: 1;
+
+            /* customizable */
+            background: rgb(255, 255, 255);
+            margin-top: -50px;
+        }
+
+        [data-tooltip]:not([data-tooltip-persistent])::before {
+            pointer-events: none;
+        }
     </style>
 </head>
 
 <body>
+    <h1 class="maintitle">
+        <img src="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" style="vertical-align:middle" width="63" height="30" viewBox="0 0 50 45" fill="none" class="footer-module--logo--_lkxx">
+        API Performance Report
+    </h1>
     <table id="example">
         <thead>
             <tr>
-                <th rowspan="2" colspan="1">METHOD</th>
-                <th rowspan="2">URL</th>
-                <th rowspan="2">PASS</th>
-                <th colspan="3">FAILED</th>
-                <th colspan="4">REQUEST DURATION</th>
-            </tr>
-            <tr>
-                <th>NULL</th>
-                <th>4XX</th>
-                <th>5XX</th>
+                <th>METHOD</th>
+                <th>URL</th>
+                <th>REQ</th>
+                <th class="pass">PASS</th>
+                <th class="fail">FAIL</th>
                 <th>AVG</th>
                 <th>MAX</th>
                 <th>P(95)</th>
@@ -396,10 +438,11 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                     <td>{{$key.UrlPattern}}</td>
                     {{ $var := processHttpDuration $value }}
                     {{ $resp := $value }}
+                        <td class="center">{{$var.TotalRequest}}</td>
                         <td class="center">{{if eq $var.PassedRequest 0}}-{{else}}{{$var.PassedRequest}}{{end}}</td>
-                        <td class="center">{{if eq $var.ServerTimeout 0}}-{{else}}{{$var.ServerTimeout}}{{end}}</td>
-                        <td class="center">{{if eq $var.RequestError 0}}-{{else}}{{$var.RequestError}}{{end}}</td>
-                        <td class="center">{{if eq $var.ServerError 0}}-{{else}}{{$var.ServerError}}{{end}}</td>
+                        <td class="center" data-tooltip="{{formatTooltip $var.ServerTimeout $var.RequestError $var.ServerError}}">
+                            {{if eq $var.TotalFailed 0}}-{{else}}{{$var.TotalFailed}}{{end}}
+                        </td>
                         <td class="center">{{printf "%.2f" $var.AverageDuration}}s</td>
                         <td class="center">{{printf "%.2f" $var.MaxDuration}}s</td>
                         <td class="center">{{printf "%.2f" $var.P95Duration}}s</td>
@@ -428,16 +471,16 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                 },
                 { 
                     targets: 1,
-                    width: '53%',
+                    width: '54%',
                 },
                 {
                     searchable: false,
-                    targets: [2,3,4,5],
-                    width: '4%'
+                    targets: [2,3,4],
+                    width: '5%'
                 },
                 {
                     searchable: false,
-                    targets: [6,7,8,9],
+                    targets: [5,6,7,8],
                     width: '6%'
                 }
                 ]
@@ -507,20 +550,22 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 	var responsesMap = getJSONAggrResults(httpaggResultsFileName)
 	temp, err := template.New("index.txt").Funcs(template.FuncMap{
 		"processHttpDuration": func(arrResponse []HttpResponseFiltered) HttpObjectMetrics {
-			var err500, err400, errNull, pass int
+			var err500, err400, errNull, pass, totalFail int
 			var tmp = make([]float64, 0, len(arrResponse))
 			for _, element := range arrResponse {
 				if element.Status == 500 {
 					err500 += 1
-					tmp = append(tmp, element.Duration)
+					totalFail += 1
 				} else if element.Status >= 400 && element.Status < 500 {
 					err400 += 1
+					totalFail += 1
 				} else if element.Status == 0 {
 					errNull += 1
+					totalFail += 1
 				} else {
 					pass++
-					tmp = append(tmp, element.Duration)
 				}
+				tmp = append(tmp, element.Duration)
 			}
 			avg, _ := stats.Mean(tmp)
 			max, _ := stats.Max(tmp)
@@ -531,12 +576,15 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 				ServerTimeout:   errNull,
 				RequestError:    err400,
 				ServerError:     err500,
+				TotalRequest:    len(arrResponse),
+				TotalFailed:     totalFail,
 				AverageDuration: float64(math.Round(avg*100) / 100000),
 				MaxDuration:     float64(math.Round(max*100) / 100000),
 				P95Duration:     float64(math.Round(p95*100) / 100000),
 				P9999Duration:   float64(math.Round(p9999*100) / 100000),
 			}
 		},
+		"formatTooltip": formatTooltip,
 	}).Parse(tpl)
 	check(err)
 
