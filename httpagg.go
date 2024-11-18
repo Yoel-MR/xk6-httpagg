@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -94,10 +95,11 @@ func trimBaseURL(url string) string {
 }
 
 func replaceGUIDs(url string) string {
-	// Replace GUID-like strings with "{GUID}"
+	// Replace GUID-like strings and 'undefined' with "{GUID}"
 	guidPattern := `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`
 	regexGUID := regexp.MustCompile(guidPattern)
 	trimmedURL := regexGUID.ReplaceAllString(url, "{GUID}")
+	trimmedURL = strings.Replace(trimmedURL, "undefined", "{GUID}", -1)
 
 	return trimmedURL
 }
@@ -107,6 +109,10 @@ func trimAndReplaceURL(url string) string {
 	baseURL := trimBaseURL(url)
 	// Replace GUID within URL with "{GUID}" text
 	trimmedURL := replaceGUIDs(baseURL)
+	// trim URL to 117 characters + add "..." if URL is longer
+	if len(trimmedURL) > 128 {
+		trimmedURL = trimmedURL[:128] + "..."
+	}
 
 	return trimmedURL
 }
@@ -201,7 +207,14 @@ func (*Httpagg) CheckRequest(response http.Response, status bool, options option
 }
 
 func formatTooltip(serverTimeout, requestError, serverError int) string {
-	return fmt.Sprintf("Timeout Error: %d\n4xx Error: %d\nServer Error: %d", serverTimeout, requestError, serverError)
+	return fmt.Sprintf("Timeout Error: %s&#10;4xx Error: %s&#10;Server Error: %s",
+		formatNumberWithComma(serverTimeout),
+		formatNumberWithComma(requestError),
+		formatNumberWithComma(serverError))
+}
+
+func formatNumberWithComma(value int) string {
+	return strconv.FormatInt(int64(value), 10)
 }
 
 func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileName string) {
@@ -209,228 +222,166 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 	<html lang="en">
 
 <head>
-    <meta charset="utf-8" />
-    <title>MR API Performance Report</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/x-icon">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" crossorigin="anonymous">
-
-    <link rel="shortcut icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/png">
-    <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
-    <script src="https://cdn.datatables.net/2.0.7/css/dataTables.dataTables.min.css"></script>
-    <script src="https://cdn.datatables.net/2.0.7/js/dataTables.min.js"></script>
+    <meta charset="UTF-8">
+  <title>MR API Performance Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/x-icon">
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.4.1/css/responsive.dataTables.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" crossorigin="anonymous">
+  <link rel="shortcut icon" href="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" type="image/png">
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
+  <meta charset="utf-8" />
     <style>
-        body {
-            margin: 2rem;
-            font-family: "Schibsted Grotesk", sans-serif;
-        }
+    body {
+      margin: 2rem;
+      font-family: "Schibsted Grotesk", sans-serif;
+    }
 
-        .maintitle {
-            text-align: center;
-            font-weight: bold;
-            margin-bottom: 40px;
-        }
+    .maintitle {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 40px;
+    }
 
-        table {
-            border-collapse: collapse;
-            max-width: 100%;
-            margin-bottom: 1.2rem;
-            margin-right: 1.2rem;
-            box-sizing: border-box;
-            font-size: 1.1rem;
-            table-layout: fixed; 
-            word-wrap:break-word; 
-        }
+    table {
+      border-collapse: collapse;
+      box-sizing: border-box;
+      font-size: 1.1rem;
+      margin-top: 2rem;
+    }
 
-        @media screen {
-            table {
-                width: 100%;
-            }
-        }
+    thead {
+      margin-top: 2rem;
+    }
 
-        th {
-            background-color: #0f72ab;
-            color: rgb(255, 255, 255);
-            line-height: 24px;
-            padding: 0.5rem;
-            text-transform: uppercase;
-            cursor: pointer;
-            border: 1px solid #4999c7;
-        }
+    th {
+      background-color: #0f72ab;
+      color: rgb(255, 255, 255);
+      cursor: pointer;
+      text-align: center !important;
+    }
 
-        th.pass {
-            background-color: #0aff99;
-        }
+    th.pass {
+      background-color: #008514;
+    }
 
-        th.fail {
-            background-color: #fa4300;
-        }
+    th.fail {
+      background-color: #982900;
+    }
 
-        th:hover {
-            background-color: #01588a;
-        }
+    th:hover {
+      background-color: #01588a;
+    }
 
-        td {
-            padding: 1.5rem;
-            border-left: 1px solid #e2e2e283;
-            border-right: 1px solid #e2e2e283;
-            border-bottom: 1px solid #e2e2e2;
-        }
+    .bold-text {
+      font-weight: bold;
+    }
 
-        tr:hover {
-            background-color: #e9e9e9;
-        }
+    .center {
+      text-align: center;
+    }
 
-        .bold-text {
-            font-weight: bold;
-        }
+    .small-text {
+      font-size: 0.9rem;
+    }
 
-        .center {
-            text-align: center;
-        }
+    .dataTables_filter {
+      margin-bottom: 1.05rem;
+    }
 
-        div.dt-info {
-            font-size: 0.8rem;
-            font-weight: 700;
-            text-align: right;
-            color: #696969;
-        }
+    .dataTables_info {
+      display: none;
+    }
 
-        .dt-paging-button {
-            color: #7e7e7e;
-            background-color: transparent;
-            border: none;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 4px;
-            padding: 6px 10px;
-            margin: 0 2px;
-        }
+    .green-row {
+      background-color: #00851416 !important;
+      color: #080
+    }
 
-        .dt-paging-button:hover:not(.disabled) {
-            background-color: #e2e2e2;
-            color: #0b84ca;
-        }
+    .red-row {
+      background-color: #b0000012 !important;
+      color: #800
+    }
 
-        .dt-paging-button.current {
-            background-color: #e2e2e2;
-            color: #0b84ca;
-        }
+    .yellow-row {
+      background-color: #d1c60012 !important;
+      color: #880
+    }
 
-        .dt-paging-button.disabled {
-            color: #cbcbcb;
-        }
+    .blue-row {
+      background-color: #0031d112 !important;
+      color: #008
+    }
 
-        .dt-length {
-            float: right;
-        }
+    .purple-row {
+      background-color: #c000d112 !important;
+      color: #808
+    }
 
-        .dt-info {
-            display: none;
-        }
+    [data-tooltip]::before {
+      /* needed - do not touch */
+      content: attr(data-tooltip);
+      position: absolute;
+      text-align: left;
+      opacity: 0;
+      white-space: pre;
+      /* Preserve whitespace and newlines */
+      color: #000;
 
-        input {
-            border: 1px solid black;
-            overflow-x: auto;
-            text-align: left;
-            overflow: visible;
-            box-sizing: border-box;
-            width: 100%;
-            padding: 12px;
-            padding-left: 20px;
-            margin-bottom: 20px;
-            margin-top: 20px;
-            border-radius: 8px;
-            font-size: 16px;
-        }
+      /* customizable */
+      transition: all 0.15s ease;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 2px 2px 1px rgb(219, 219, 219);
+      line-height: 1.5;
+    }
 
-        select {
-            margin: 0px 4px;
-            font-size: 16px;
-            padding: 4px;
-            border: none;
-            border-radius: 4px;
-            background-color: #e5e5e5;
-        }
+    [data-tooltip]:hover::before {
+      /* needed - do not touch */
+      opacity: 1;
 
-        .green-row {
-            background-color: #efe;
-            color: #080
-        }
+      /* customizable */
+      background: rgb(255, 255, 255);
+      margin-top: -50px;
+    }
 
-        .red-row {
-            background-color: #fee;
-            color: #800
-        }
-
-        .yellow-row {
-            background-color: #ffe;
-            color: #880
-        }
-
-        .blue-row {
-            background-color: #eff;
-            color: #008
-        }
-
-        .purple-row {
-            background-color: #fef;
-            color: #808
-        }
-        
-        [data-tooltip]::before {
-            /* needed - do not touch */
-            content: attr(data-tooltip);
-            position: absolute;
-            text-align: left;
-            opacity: 0;
-            white-space: pre; /* Preserve whitespace and newlines */
-            color: #000;
-
-            /* customizable */
-            transition: all 0.15s ease;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 2px 2px 1px rgb(219, 219, 219);
-        }
-
-        [data-tooltip]:hover::before {
-            /* needed - do not touch */
-            opacity: 1;
-
-            /* customizable */
-            background: rgb(255, 255, 255);
-            margin-top: -50px;
-        }
-
-        [data-tooltip]:not([data-tooltip-persistent])::before {
-            pointer-events: none;
-        }
-    </style>
+    [data-tooltip]:not([data-tooltip-persistent])::before {
+      pointer-events: none;
+    }
+  </style>
 </head>
 
 <body>
     <h1 class="maintitle">
-        <img src="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" style="vertical-align:middle" width="63" height="30" viewBox="0 0 50 45" fill="none" class="footer-module--logo--_lkxx">
-        API Performance Report
-    </h1>
-    <table id="example">
+    <img src="https://medirecords.com/wp-content/uploads/2020/02/logo.svg" style="vertical-align:middle" width="63"
+      height="30" viewBox="0 0 50 45" fill="none" class="footer-module--logo--_lkxx">
+    API Performance Report
+  </h1>
+  <table id="example" class="display responsive nowrap row-border hover left" style="width:100%">
         <thead>
-            <tr>
-                <th>METHOD</th>
-                <th>URL</th>
-                <th>REQ</th>
-                <th class="pass">PASS</th>
-                <th class="fail">FAIL</th>
-                <th>AVG</th>
-                <th>MAX</th>
-                <th>P(95)</th>
-                <th>P(99.99)</th>
-            </tr>
-        </thead>
+      <tr>
+        <th>Method</th>
+        <th>URL</th>
+        <th>Total Req</th>
+        <th class="pass">Passed</th>
+        <th class="fail">Failed</th>
+        <th><i class="fas fa-clock"></i> AVG</th>
+        <th>P95</th>
+        <th>P99</th>
+        <th>MAX</th>
+      </tr>
+    </thead>
         <tbody>
             {{ range $key, $value := . }}
                 <tr>
@@ -438,10 +389,10 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                     <td>{{$key.UrlPattern}}</td>
                     {{ $var := processHttpDuration $value }}
                     {{ $resp := $value }}
-                        <td class="center">{{$var.TotalRequest}}</td>
-                        <td class="center">{{if eq $var.PassedRequest 0}}-{{else}}{{$var.PassedRequest}}{{end}}</td>
-                        <td class="center" data-tooltip="{{formatTooltip $var.ServerTimeout $var.RequestError $var.ServerError}}">
-                            {{if eq $var.TotalFailed 0}}-{{else}}{{$var.TotalFailed}}{{end}}
+                        <td class="center">{{formatNumberWithComma $var.TotalRequest}}</td>
+                        <td class="center">{{if eq $var.PassedRequest 0}}-{{else}}{{formatNumberWithComma $var.PassedRequest}}{{end}}</td>
+                        <td class="center" {{if ne $var.TotalFailed 0}}data-tooltip="{{formatTooltip $var.ServerTimeout $var.RequestError $var.ServerError}}"{{end}}>
+                          {{if eq $var.TotalFailed 0}}-{{else}}{{formatNumberWithComma $var.TotalFailed}}{{end}}
                         </td>
                         <td class="center">{{printf "%.2f" $var.AverageDuration}}s</td>
                         <td class="center">{{printf "%.2f" $var.MaxDuration}}s</td>
@@ -452,96 +403,100 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
         </tbody>
     </table>
 
-    <script type="module">
-        $(document).ready(function () {
-            $('#example').DataTable({
-                "language": {
-                    "lengthMenu": 'Show _MENU_ of _TOTAL_ Total Request',
-                    "search": '',
-                    "searchPlaceholder": "Search...",
-                    "emptyTable": "No data",
-                    "zeroRecords": 'No records found'
-                },
-                autoWidth: false,
-                columnDefs: [
-                {
-                    
-                    targets: 0,
-                    width: '7%',
-                },
-                { 
-                    targets: 1,
-                    width: '54%',
-                },
-                {
-                    searchable: false,
-                    targets: [2,3,4],
-                    width: '5%'
-                },
-                {
-                    searchable: false,
-                    targets: [5,6,7,8],
-                    width: '6%'
-                }
-                ]
-            });
+  <script>
+    $(document).ready(function () {
+      // Destroy the DataTable if it's already initialized
+      if ($.fn.dataTable.isDataTable('#example')) {
+        $('#example').DataTable().destroy();
+      }
 
-            // Function to determine row color based on data
-            function determineRowColor(rowData) {
-                // Change row color based on the method value
-                if (rowData[0] === 'GET') {
-                    return 'green-row';
-                } else if (rowData[0] === 'POST') {
-                    return 'yellow-row';
-                } else if (rowData[0] === 'PUT') {
-                    return 'blue-row';
-                } else if (rowData[0] === 'DELETE') {
-                    return 'red-row';
-                } else if (rowData[0] === 'PATCH'){
-                    return 'purple-row';
-                } else {
-                    return ''
-                }
+      // Initialize the DataTable
+      $('#example').DataTable({
+        ordering: true,
+        "language": {
+          "lengthMenu": 'Show _MENU_ Request',
+          "search": '',
+          "searchPlaceholder": "Search...",
+          "emptyTable": "No data",
+          "zeroRecords": 'No records found',
+          "paginate": {
+            previous: '<<', // Custom previous button
+            next: '>>' // Optional: Customize next button
+          },
+        },
+        "lengthMenu": [50, 100, 200],
+        order: [[4, 'desc'], [7, 'desc']],
+        responsive: true,
+        columnDefs: [
+          {
+            targets: 0,
+            width: '5%',
+            className: 'bold-text',
+          },
+          {
+            targets: 1,
+            width: '40%',
+            createdCell: function (td, cellData, rowData, row, col) {
+              $(td).addClass('small-text');
             }
+          },
+          {
+            searchable: false,
+            targets: [2, 3, 4, 5, 6, 7, 8],
+            width: '5%'
+          },
+        ],
+        "createdRow": function (row, data, dataIndex) {
+          $('td', row).css('padding-top', '1.5rem'); // Adjust the padding value as needed
+          $('td', row).css('padding-bottom', '1.5rem'); // Adjust the padding value as needed
+        },
+        // function to modify paginate_button css (no border, no background-color, custom text color)
+        "drawCallback": function () {
+          $('.paginate_button').css('border', 'none');
+          $('.paginate_button').css('background-color', 'transparent');
+          $('.paginate_button').css('color', '#0b84ca');
+        },
+      });
 
-            // Apply row colors
-            function applyRowColors() {
-                $('#example tbody tr').each(function () {
-                    const rowData = $('#example').DataTable().row(this).data();
-                    const rowColorClass = determineRowColor(rowData);
-                    $(this).addClass(rowColorClass);
-                });
-            }
-            
-            // Apply row colors when table is initially loaded
-            applyRowColors();
-            
-            // Reapply row colors on each draw event (including pagination)
-            $('#example').on('draw.dt', function () {
-                applyRowColors();
-            });
+      // Function to determine row color based on data
+      function determineRowColor(rowData) {
+        // Change row color based on the method value
+        if (rowData[0] === 'GET') {
+          return 'green-row';
+        } else if (rowData[0] === 'POST') {
+          return 'yellow-row';
+        } else if (rowData[0] === 'PUT') {
+          return 'blue-row';
+        } else if (rowData[0] === 'DELETE') {
+          return 'red-row';
+        } else if (rowData[0] === 'PATCH') {
+          return 'purple-row';
+        } else {
+          return ''
+        }
+      }
 
-            // Trigger row color assignment on initial load
-            $('#example tbody').trigger('draw');
-
-            // change testform
-            document.querySelectorAll("textarea").forEach(element => {
-                function autoResize(el) {
-                    el.style.height = el.scrollHeight + 'px';
-                }
-                autoResize(element);
-                element.addEventListener('input', () => autoResize(element));    
-            });
-
-            $(document).on("click", 'thead tr', function() {
-                $('table tr').eq(1).trigger('click');
-            });
-
-            $(document).on("click", '.paginate_button', function() {
-                $('table tr').eq(1).trigger('click');
-            });
+      // Apply row colors
+      function applyRowColors() {
+        $('#example tbody tr').each(function () {
+          const rowData = $('#example').DataTable().row(this).data();
+          const rowColorClass = determineRowColor(rowData);
+          $(this).addClass(rowColorClass);
         });
-    </script>
+      }
+
+      // Apply row colors when table is initially loaded
+      applyRowColors();
+
+      // Reapply row colors on each draw event (including pagination)
+      $('#example').on('draw.dt', function () {
+        applyRowColors();
+      });
+
+      // Trigger row color assignment on initial load
+      $('#example tbody').trigger('draw');
+    });
+  </script>
 </body>
 
 </html>
@@ -584,7 +539,8 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
 				P9999Duration:   float64(math.Round(p9999*100) / 100000),
 			}
 		},
-		"formatTooltip": formatTooltip,
+		"formatTooltip":         formatTooltip,
+		"formatNumberWithComma": formatNumberWithComma,
 	}).Parse(tpl)
 	check(err)
 
