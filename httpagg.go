@@ -395,9 +395,9 @@ func (*Httpagg) GenerateRaport(httpaggResultsFileName string, httpaggReportFileN
                           {{if eq $var.TotalFailed 0}}-{{else}}{{formatNumberWithComma $var.TotalFailed}}{{end}}
                         </td>
                         <td class="center">{{printf "%.2f" $var.AverageDuration}}s</td>
-                        <td class="center">{{printf "%.2f" $var.MaxDuration}}s</td>
                         <td class="center">{{printf "%.2f" $var.P95Duration}}s</td>
                         <td class="center">{{printf "%.2f" $var.P9999Duration}}s</td>
+                        <td class="center">{{printf "%.2f" $var.MaxDuration}}s</td>
                     </tr>
                 {{ end }}
         </tbody>
